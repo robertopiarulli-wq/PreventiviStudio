@@ -1,74 +1,50 @@
 import streamlit as st
 import pdfplumber
 import pandas as pd
-import io
-from PIL import Image
 
-st.title("🧪 Test PDF Completo - Testo + Immagini")
+st.title("📊 Estrattore Tabelle PDF")
 
 uploaded = st.file_uploader("Carica PDF", type="pdf")
 
 if uploaded is not None:
-    images_data = []
-    
     with pdfplumber.open(uploaded) as pdf:
-        all_lines = []
-        all_images = []
+        all_tables = []
         
         for i, page in enumerate(pdf.pages):
-            # === TESTO ===
-            page_text = page.extract_text()
-            if page_text:
-                for j, line in enumerate(page_text.split('\n')):
-                    text = line.strip()
-                    if text and len(text) > 3:
-                        all_lines.append({
-                            'Pagina': i+1,
-                            'Riga': j+1, 
-                            'Testo': text[:100],
-                            'Ha_Immagine': '❌'
-                        })
+            # === ESTRAI TABELLE (non testo libero) ===
+            tables = page.extract_tables()
             
-            # === IMMAGINI ===
-            for img_idx, img in enumerate(page.images):
-                try:
-                    img_bytes = img["stream"].get_data()
-                    img_pil = Image.open(io.BytesIO(img_bytes))
-                    
-                    all_images.append({
-                        'Pagina': i+1,
-                        'Immagine': f'img_p{i+1}_{img_idx}',
-                        'Testo': f'Immagine {img_idx+1} Pg.{i+1}',
-                        'Ha_Immagine': '✅'
-                    })
-                    
-                    # Salva in session per preview
-                    st.session_state[f'img_p{i+1}_{img_idx}'] = img_pil
-                    
-                except:
-                    pass
+            for table_idx, table in enumerate(tables or []):
+                if table and len(table) > 1:  # Salta tabelle vuote
+                    df_table = pd.DataFrame(table[1:], columns=table[0])  # Prima riga = header
+                    df_table['Pagina'] = i+1
+                    df_table['Tabella'] = table_idx+1
+                    all_tables.append(df_table)
+            
+            # Debug: mostra layout tabelle
+            st.write(f"📄 Pg {i+1}: {len(tables or [])} tabelle trovate")
         
-        # Combina testo + immagini
-        df = pd.DataFrame(all_lines + all_images)
-        
-        st.success(f"✅ {len(all_lines)} righe testo + {len(all_images)} immagini!")
-        
-        # Tabella con 4 colonne chiare
-        st.dataframe(
-            df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Testo": st.column_config.TextColumn("📄 Testo/Desc", width="large"),
-                "Pagina": st.column_config.NumberColumn("📄 Pg"),
-                "Riga": st.column_config.NumberColumn("🔢 Riga"),
-                "Ha_Immagine": st.column_config.TextColumn("🖼️ Img")
-            }
-        )
-        
-        # Preview immagini
-        if all_images:
-            st.subheader("🖼️ Anteprime Immagini")
-            for img_key in st.session_state:
-                if img_key.startswith('img_p'):
-                    st.image(st.session_state[img_key], caption=img_key, width=200)
+        if all_tables:
+            # Unisci tutte le tabelle
+            df_final = pd.concat(all_tables, ignore_index=True)
+            
+            st.success(f"✅ {len(df_final)} righe tabella estratte!")
+            
+            # MOSTRA 5 COLONNE + Pagina/Tabella
+            st.dataframe(
+                df_final,
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "0": st.column_config.TextColumn("Colonna 1"),
+                    "1": st.column_config.TextColumn("Colonna 2"),
+                    "2": st.column_config.TextColumn("Colonna 3"),
+                    "3": st.column_config.TextColumn("Colonna 4"),
+                    "4": st.column_config.TextColumn("Colonna 5"),
+                    "Pagina": st.column_config.NumberColumn("📄 Pg"),
+                }
+            )
+            
+            st.download_button("💾 CSV", df_final.to_csv(index=False), "tabelle.csv")
+        else:
+            st.warning("❌ Nessuna tabella trovata. Prova extract_text()...")
