@@ -1,28 +1,38 @@
 import streamlit as st
 import pdfplumber
-import pandas as pd
 
-st.title("📊 Estrattore Tabelle PDF - Fix")
+st.title("📊 PDF Completo - No Error")
 
 uploaded = st.file_uploader("Carica PDF", type="pdf")
 
 if uploaded is not None:
     with pdfplumber.open(uploaded) as pdf:
-        st.subheader("📋 Tabelle trovate")
-        
         for i, page in enumerate(pdf.pages):
-            tables = page.extract_tables()
-            st.write(f"**Pagina {i+1}**: {len(tables or [])} tabelle")
+            st.markdown(f"---\n**📄 Pagina {i+1}**")
             
-            for table_idx, table in enumerate(tables or []):
-                if table and len(table) > 1:
-                    # NON concat - crea DF per ogni tabella
-                    df_table = pd.DataFrame(table[1:], columns=table[0])
-                    df_table['Pagina'] = i+1
-                    df_table['Tabella'] = table_idx+1
-                    
-                    st.write(f"Tabella {table_idx+1} (righe: {len(df_table)})")
-                    st.dataframe(df_table, use_container_width=True, hide_index=True)
-                    st.markdown("---")
-        
-        st.success("✅ Fatto! Ogni tabella mostrata separatamente.")
+            # === TESTO RIGHE ===
+            page_text = page.extract_text()
+            if page_text:
+                lines = [line.strip() for line in page_text.split('\n') if line.strip()]
+                st.write(f"📝 **{len(lines)} righe testo**")
+                for j, line in enumerate(lines[:10]):  # Prime 10
+                    st.write(f"**Riga {j+1}:** {line[:150]}")
+                if len(lines) > 10:
+                    st.write("... e altre")
+            
+            # === TABELLE (senza pandas) ===
+            tables = page.extract_tables()
+            if tables:
+                st.write(f"📊 **{len(tables)} tabelle**")
+                for t_idx, table in enumerate(tables):
+                    st.write(f"**Tabella {t_idx+1}:**")
+                    for row_idx, row in enumerate(table[:5]):  # Prime 5 righe
+                        st.write(f"  Riga {row_idx+1}: {row}")
+                    st.write("")
+            
+            # === IMMAGINI ===
+            imgs = page.images
+            if imgs:
+                st.write(f"🖼️ **{len(imgs)} immagini**")
+                for img_idx, img in enumerate(imgs):
+                    st.write(f"  Immagine {img_idx+1}: {img['size']}")
