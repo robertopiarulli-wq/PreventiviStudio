@@ -1,3 +1,4 @@
 streamlit
-pdfplumber
+pdfplumber  
 pandas
+Pillow
